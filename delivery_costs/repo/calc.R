@@ -19,6 +19,7 @@ if(!identical(getOption("bitmapType"), "cairo") && isTRUE(capabilities()[["cairo
 
 #set control flow params
 reload <- T #set true if you want to reprep all the data
+disease <- 'Schisto'
 
 ## Set core_repo locations
 user            <- Sys.info()['user']
@@ -58,30 +59,52 @@ ihme_version <- '2022-09-13'
 ihme_data_dir <- file.path(my_dropbox, 'IHME', ihme_version)
   pop_path <- 'IU_pop_dens_all_age.csv'
   
-#ntd mc data
-mc_version <- '2023-02-24'
-mc_data_dir <- file.path(my_dropbox, 'LF/NTD MC')
-
-#TODO for now we are just doing this for LF. in the future should be a function with disease type as an argument
-lf_version <- '2022-08-26'
-lf_data_dir <- file.path(my_dropbox, paste0('LF/InputData ', lf_version))
-  lf_path <- 'MDA_costs_22_08_2022_AM.csv'
-
+#disease specific data
+#TODO should create a database for this and make a function to pull these vals from it
+if (disease=='LF') {
+  #ntd mc data
+  mc_version <- '2023-02-24'
+  mc_data_dir <- file.path(my_dropbox, disease, 'NTD MC')
   
-#also some IU level data for LF
-  lf_iu_version <- '2023-02-15'
-  lf_iu_data_dir <- file.path(my_dropbox, paste0('LF/InputData ', lf_iu_version))
-  lf_iu_path <- 'lf_long_IU_cov.csv' #coverage data at IU scenario level
-  lf_iu_dens_path <- 'IU_pop_dens.csv' #population data at IU year level
-  lf_iu_int_path <- 'MDA-procurement-cost_LF.xlsx' #disease integration structure
+  #TODO for now we are just doing this for LF. in the future should be a function with disease type as an argument
+  lf_version <- '2022-08-26'
+  lf_data_dir <- file.path(my_dropbox, paste0(disease, '/InputData ', lf_version))
+    lf_path <- 'MDA_costs_22_08_2022_AM.csv'
   
-  # example_path <- "Example data/Example_data_for_testing_code_7_12_2022.csv"
-  # cost_path <- 'Cost_data_23_08_2022_complete_to_share.csv'
+    
+  #also some IU level data for LF
+    lf_iu_version <- '2023-02-15'
+    lf_iu_data_dir <- file.path(my_dropbox, paste0(disease, '/InputData ',  lf_iu_version))
+    lf_iu_path <- paste0(disease %>% tolower, '_long_IU_cov.csv') #coverage data at IU scenario level
+    lf_iu_dens_path <- 'IU_pop_dens.csv' #population data at IU year level
+    lf_iu_int_path <- 'MDA-procurement-cost_LF.xlsx' #disease integration structure
 
-###Output###
-lf_out_dir <- file.path(my_dropbox, paste0('LF/OutputData ', lf_version))
-out_dir <- file.path(local_dir, 'output')
-viz_dir  <- file.path(local_dir, 'viz')
+} else if (disease=='Schisto') {
+  #ntd mc data
+  mc_version <- '2023-03-13'
+  mc_data_dir <- file.path(my_dropbox, disease, 'NTD MC')
+  
+  #TODO for now we are just doing this for LF. in the future should be a function with disease type as an argument
+  #versions
+  dis_version <- '2023-03-20'
+  dis_iu_version <- '2023-03-20'
+  #directories
+  data_dir <- file.path(my_dropbox, paste0(disease, '/InputData ', dis_version))
+  iu_data_dir <- file.path(my_dropbox, paste0(disease, '/InputData ',  dis_iu_version))
+  #filepaths
+  cost_path <- 'MDA_costs_22_08_2022_AM.csv'
+  assumptions_path <- paste0(disease, '_scenario_cost_model_assumptions.csv')
+  iu_path <- paste0(disease %>% tolower, '_mean_IU_cov.csv') #coverage data at IU scenario level
+  iu_dens_path <- 'IU_pop_dens.csv' #population data at IU year level
+  #iu_int_path <- 'MDA-procurement-cost_LF.xlsx' #disease integration structure
+  
+
+}
+  
+  ###Output###
+  drop_out_dir <- file.path(my_dropbox, disease, paste0('OutputData ', dis_version))
+  out_dir <- file.path(local_dir, 'output', disease)
+  viz_dir  <- file.path(local_dir, 'viz', disease)
 #***********************************************************************************************************************
 
 # ---FUNCTIONS----------------------------------------------------------------------------------------------------------
@@ -107,50 +130,52 @@ if(reload) {
   
   #combine all the core datasets
   
+  #TODO verify we dont need this now and remove
   #population dataset which will spread things out to be at IUs
-  pop_dt <- file.path(ihme_data_dir, pop_path) %>% 
-    fread %>% 
-    setnames(., names(.), names(.) %>% tolower) %>% 
-    setnames(., c('ihme_loc_id', 'dens'), c('iso','pop_density')) %>% 
-    .[, espen_loc := paste0(iso, '0', iu_id)]
-  
-  #ntd mc dataset which we will filter the IUs by
-  iu_dt <- file.path(mc_data_dir, mc_version, 'Data') %>% 
-    list.files(full.names = T) %>% 
-    lapply(., fread, select=c('espen_loc')) %>% 
-    rbindlist %>% 
-    unique(by='espen_loc')
-  
-  iu_list <- unique(iu_dt$espen_loc) %>% 
-    str_remove_all(., "[^0-9.-]") %>% #remove isos 
-    str_remove_all(., "^0+") %>% #remove trailing zeros
-    as.integer
-  
-  #filter the pop dataset to the modelled IUs
-  #TODO, the pops file is not unique by IU...so we need to get the year variable added to this file but for now..
-  #i will just select the first row of each IU (latest year?)
-  #note we could also select the last row using (fromLast=T)
-  pop_dt <- pop_dt[iu_id%in%iu_list]%>% 
-    unique(by='iu_id')
+  # pop_dt <- file.path(ihme_data_dir, pop_path) %>% 
+  #   fread %>% 
+  #   setnames(., names(.), names(.) %>% tolower) %>% 
+  #   setnames(., c('ihme_loc_id', 'dens'), c('iso','pop_density')) %>% 
+  #   .[, espen_loc := paste0(iso, '0', iu_id)]
+  # 
+  # #ntd mc dataset which we will filter the IUs by
+  # iu_dt <- file.path(mc_data_dir, mc_version, 'Data') %>% 
+  #   list.files(full.names = T) %>% 
+  #   lapply(., fread, select=c('espen_loc')) %>% 
+  #   rbindlist %>% 
+  #   unique(by='espen_loc')
+  # 
+  # iu_list <- unique(iu_dt$espen_loc) %>% 
+  #   str_remove_all(., "[^0-9.-]") %>% #remove isos 
+  #   str_remove_all(., "^0+") %>% #remove trailing zeros
+  #   as.integer
+  # 
+  # #filter the pop dataset to the modelled IUs
+  # #TODO, the pops file is not unique by IU...so we need to get the year variable added to this file but for now..
+  # #i will just select the first row of each IU (latest year?)
+  # #note we could also select the last row using (fromLast=T)
+  # pop_dt <- pop_dt[iu_id%in%iu_list]%>% 
+  #   unique(by='iu_id')
 
-  
-  #lf dataset which is disease/scenario specific
-  lf_dt <- file.path(lf_data_dir, lf_path) %>% 
+  #disease dataset which is disease/scenario specific
+  #TODO we are currently just pulling GDP from this and setting all other model assumptions
+  #eventually we should set it up so that we are pulling that centrally
+  dt <- file.path(data_dir, 'lf_IU_cost_MDA_delivery_preds.csv') %>% 
     fread %>% 
     setnames(., names(.), names(.) %>% tolower) %>%  #force names to lowercase for consistency 
     unique(by=c('iso')) %>%  #collapse the scenarios, we will use another datasheet
     .[, scenario := NULL] %>% 
-    .[, c('iso', 'gdp', 'delivery_cost_range')] %>%  #this is all we need for now
+    .[, c('iso', 'gdp'), with=F] %>%  #this is all we need for now
     #TODO eventually should just retire this dataset as gdp is the only use of it now
     #impute the IMP decision constants
     #TODO, validate these assumptions and eventually put them all into an assumption sheet to merge on?
     .[, eco := 0] %>% 
     .[, vol := 0] %>% 
-    #.[, int := 1] %>% #this is now country/cov specific
-    .[, rds := 1] %>%  #TODO should be scenario specific but it's not present
+    { if(disease=='Schisto') .[, int := 1] else . } %>%  #this is now country/cov specific for some diseases
+    { if(disease=='LF') .[, rds := 1] else . } %>%  #TODO should be scenario specific but it's not present
     .[, yrs := 5] %>% 
     .[, nat := 0] %>%  #TODO could invert subnat but its the same assumption
-    .[, sch := 0] %>% 
+    { if(disease=='LF') .[, sch := 1] else . } %>%
     #.[, den := pop_density] %>% #match the naming in fitzpatrick model
     #.[, pop := str_replace_all(pop, ',', '') %>% as.numeric] %>% #convert from chr to numeric
     #.[, pop_treated := str_replace_all(`mda size`, ',', '') %>% as.numeric] %>% #convert from chr to numeric
@@ -165,46 +190,61 @@ if(reload) {
   
   
   #there are 6 countries some missing pops/mda size/GDPs so i will impute them using world bank figures
-  lf_dt[iso=='BDI', gdp:= 221.48]
-  lf_dt[iso=='BFA', gdp:= 893.08]
-  lf_dt[iso=='MWI', gdp:= 634.84]
-  lf_dt[iso=='SLE', gdp:= 480.04]
-  lf_dt[iso=='SWZ', gdp:= 3978.4]
-  lf_dt[iso=='TZZ', gdp:= 1031] #zanzibar: i didnt see this split out on the world bank site so i used UN figures here:
+  dt[iso=='BDI', gdp:= 221.48]
+  dt[iso=='BFA', gdp:= 893.08]
+  dt[iso=='MWI', gdp:= 634.84]
+  dt[iso=='SLE', gdp:= 480.04]
+  dt[iso=='SWZ', gdp:= 3978.4]
+  dt[iso=='TZZ', gdp:= 1031] #zanzibar: i didnt see this split out on the world bank site so i used UN figures here:
   #http://data.un.org/Data.aspx?d=SNAAMA&f=grID:101;currID:USD;pcFlag:1;crID:836
 
   #add quintiles of gdp
-  lf_dt[, gdp_quint := cut(gdp, quantile(gdp, probs=0:5/5, na.rm=T), include.lowest=TRUE, labels=FALSE)]
+  dt[, gdp_quint := cut(gdp, quantile(gdp, probs=0:5/5, na.rm=T), include.lowest=TRUE, labels=FALSE)]
   
   
   #they are also missing pop/pop densities, using the mean by GDP for now
-  # lf_dt[, pop := impute_mean(pop), by=gdp_quint] #missing densities for some countries (see below)
-  # lf_dt[, den := impute_mean(den), by=gdp_quint] #missing densities for some countries (see below)
+  # dt[, pop := impute_mean(pop), by=gdp_quint] #missing densities for some countries (see below)
+  # dt[, den := impute_mean(den), by=gdp_quint] #missing densities for some countries (see below)
   
   #bring in the IU level data and merge it on to expand and calculate pop treated
   #iu/scenario specific coverage
-  lf_iu_cov_dt <- file.path(lf_iu_data_dir, lf_iu_path) %>% 
-    fread %>% 
-    setnames('value', 'cov') %>% 
-    .[, ]
+  iu_cov_dt <- file.path(iu_data_dir, iu_path) %>% 
+    fread 
+  
   #iu level population data
-  lf_dens_dt <- file.path(lf_iu_data_dir, lf_iu_dens_path) %>% 
+  dens_dt <- file.path(iu_data_dir, iu_dens_path) %>% 
     fread
+  
   #disease integration data at country level
-  lf_int_dt <- file.path(lf_iu_data_dir, lf_iu_int_path) %>% 
-    read_excel() %>% 
-    as.data.table() %>% 
-    .[, .(ISO, `Co-endemic`)] %>% 
-    unique() %>% #TODO verify that theres no difference in integration between the different Product/Drug groups (there are 2 diff)
-    .[, int := 1] %>% 
-    .[`Co-endemic`==1, int := 2]
+  if(disease=='LF') {
+    int_dt <- file.path(iu_data_dir, iu_int_path) %>% 
+      read_excel() %>% 
+      as.data.table() %>% 
+      .[, .(ISO, `Co-endemic`)] %>% 
+      unique() %>% #TODO verify that theres no difference in integration between the different Product/Drug groups (there are 2 diff)
+      .[, int := 1] %>% 
+      .[`Co-endemic`==1, int := 2]
+  #sch/rds at scenario level
+  } else if (disease=='Schisto') {
+    assumption_dt <- int_dt <- file.path(data_dir, assumptions_path) %>% 
+      fread(header=T) %>% 
+      melt(id.vars=c('scenario', 'parameter'),
+           measure.vars = c(2022:2040) %>% as.character,
+           variable.name = 'year_id',
+           variable.factor=F) %>% 
+      .[, year_id := as.integer(year_id)] %>% 
+      dcast(scenario+year_id~parameter,
+            value.var='value') %>% 
+      setnames(., names(.), names(.) %>% tolower)
+  }
   
   #expand to the IU level and add coverage/density
-  lf_dt <- merge(lf_dt, lf_iu_cov_dt, by.x=c('iso'), by.y=c('ISO'))
-  lf_dt <- merge(lf_dt, lf_dens_dt, by=c('IU_ID', 'year_id')) #TODO verify correct year
-  lf_dt <- merge(lf_dt, lf_int_dt, by.x=c('iso'), by.y=c('ISO'))
-  lf_dt[, pop_treated := cov*adj_pop]#calculate the target pop as cov*IU pop
-  lf_dt[, pop_density := dens]
+  dt <- merge(dt, iu_cov_dt, by.x=c('iso'), by.y=c('ISO'))
+  dt <- merge(dt, dens_dt, by=c('IU_ID', 'year_id')) #TODO verify correct year
+  if(disease=='LF') dt <- merge(dt, int_dt, by.x=c('iso'), by.y=c('ISO'))
+  if (disease=='Schisto') dt <- merge(dt, assumption_dt, by=c('scenario', 'year_id'))
+  dt[, pop_treated := cov*adj_pop]#calculate the target pop as cov*IU pop
+  dt[, pop_density := dens]
   
 }
 
@@ -353,14 +393,14 @@ og_mod <- lmer(log(ucb)~eco+vol+log(int)+log(rds)+
             data=mda_uc)
 
 #run our version of the model
-mod <- lmer(log(ucb)~eco+vol+log(int)+log(rds)+yrs+logit(cov)+sch+
+mod <- lmer(log(ucb)~eco+vol+log(int)+log(rds)+yrs+car::logit(cov)+sch+
               log(pop_treated)*log(pop_density)+log(gdp)+
               VUT+Kri+Fri+Mon+
-              eco:log(int)+eco:sch+sch:logit(cov)+
+              eco:log(int)+eco:sch+sch:car::logit(cov)+
               (1|study_ref),
             data=mda_uc[nat==0])
 
-nat_mod <- lmer(log(ucb)~eco+vol+log(int)+log(rds)+yrs+logit(cov)+sch+
+nat_mod <- lmer(log(ucb)~eco+vol+log(int)+log(rds)+yrs+car::logit(cov)+sch+
               log(pop_treated)+log(den)+log(gdp)+
               VUT+Kri+Fri+Mon+
               eco:log(int)+eco:sch+cov:sch+
@@ -375,46 +415,26 @@ stargazer(mod,
 #***********************************************************************************************************************
 
 # ---PREDICT------------------------------------------------------------------------------------------------------------
-#tested the injection method, works as long as the coefficients are ordered correctly in the model coef dt
-# mod_test <- lm(y~eco+vol+log(int),
-#                data=example_dt)
-# mod_test$coefficients <- c(1.134, .157, -1.348, -.17)
-# example_dt[, cost_test := exp(eco*.157 + vol*-1.348 + log(int)*-.17+1.134)]
-#TODO test a few rows manually
-
-#make national predictions
-#lf_dt[, cost_natl := predict(mod, newdata =lf_dt, re.form=NA) %>% exp]
-
-#merge with pop density data to breakdown into IUs
-#setnames(lf_dt, c('pop_density'), c('pop_density_iso'))
-#lf_dt <- merge(lf_dt, pop_dt, by='iso', all.x=T, allow.cartesian = T)
-#lf_dt[, den := pop_density] #match the naming conventions in fitzpatrick model
-#lf_dt[, den := impute_mean(den), by=gdp_quint] #TODO missing densities for some IUs, use avg by GDP
-#setnames(lf_dt, 'adj_pop', 'pop') #TODO confirm that this is the right value
-
 #generate also the IU cost
-#should we be changing nat to 0 now that these are subnational sites?
-lf_dt[, nat := 0] #if we do it significantly drops the cost to more reasonable values
-lf_dt[, sch := 0]
-lf_dt[gdp>max(mda_uc$gdp, na.rm=T), gdp := max(mda_uc$gdp, na.rm=T)] #cap GDP to maximum value in dataset
-lf_dt[, cost_iu := predict(mod, newdata =lf_dt, re.form=NA) %>% exp]
+dt[gdp>max(mda_uc$gdp, na.rm=T), gdp := max(mda_uc$gdp, na.rm=T)] #cap GDP to maximum value in dataset
+dt[, cost_iu := predict(mod, newdata =dt, re.form=NA) %>% exp]
 
 #output the results
-write.csv(lf_dt[, c('iso', 'scenario', 'year_id', 'IU_ID', coef_vars, 'cost_iu'), with=F], 
-          file=file.path(lf_out_dir, 'delivery_cost_preds_integrated.csv'))
+write.csv(dt[, c('iso', 'scenario', 'year_id', 'IU_ID', coef_vars, 'cost_iu'), with=F], 
+          file=file.path(drop_out_dir, 'delivery_cost_preds.csv'))
 #***********************************************************************************************************************
 
 # ---DIAGNOSTICS--------------------------------------------------------------------------------------------------------
 ##examine some rows and test them against the online shiny tool
 #this line can be used interactively to test different country and IU combinations in a compact manner
-lf_dt[iso=="NGA", c('iso', 'IU_ID', coef_vars, 'cost_iu'), with=F]
+dt[iso=="NGA", c('iso', 'IU_ID', coef_vars, 'cost_iu'), with=F]
 
 #highlight outliers for plots
-lf_dt[, iso_label := ifelse(isOutlier(cost_iu), iso, NA_character_)]
-lf_dt[is.na(iso_label), iso_label:="All Others"]
+dt[, iso_label := ifelse(isOutlier(cost_iu), iso, NA_character_)]
+dt[is.na(iso_label), iso_label:="All Others"]
 
 #see which variables are driving outliers
-plot_dt <- melt(lf_dt,
+plot_dt <- melt(dt,
                 measure.vars=cont_vars,
                 variable.name = 'dep_var',
                 value.name = 'dep_value')
@@ -474,7 +494,7 @@ subnatlDensPlot <- function(i, var, dt) {
     theme_minimal()
 }
 pdf(file.path(viz_dir, 'subnatl_cost_distributions.pdf'), height=8, width=12)
-lapply(unique(lf_dt$gdp_quint) %>% sort, subnatlDensPlot, dt=lf_dt, var='cost_iu')
+lapply(unique(dt$gdp_quint) %>% sort, subnatlDensPlot, dt=dt, var='cost_iu')
 dev.off()
 
 #check out the relationships between the covariates and cost
